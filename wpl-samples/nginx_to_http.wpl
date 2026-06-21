@@ -1,0 +1,28 @@
+// nginx → http_events
+// 原始日志格式: 222.133.52.20 - - [06/Aug/2019:12:12:19 +0800]
+//   "GET /nginx-logo.png HTTP/1.1" 200 368 "http://ref/" "Mozilla/5.0 ..." "-"
+// 字段: ip sip, _ , _ , time event_time, http/request, http/status, digit bytes_out, chars uri_referer, http/agent user_agent, _
+
+package /nginx/ {
+    rule example {
+        (ip:sip, _, _,
+         time/clf:event_time,
+         http/request,    // "GET /path HTTP/1.1" → method, uri 由 wparse http 内置解析分别产出
+         http/status,     // "200" → status
+         digit:bytes_out, // "368" → bytes_out
+         chars,           // referer — 跳过（http_events schema 不需要）
+         http/agent:user_agent, // "Mozilla/5.0 ..." → user_agent
+         _                // "-" — 跳过
+        )
+    }
+}
+
+// 产出字段对照 http_events schema：
+//   sip         ✅ ip: 222.133.52.20
+//   event_time  ✅ time/clf: 2019-08-06T12:12:19+0800
+//   method      ✅ http/request 内置 → "GET"（wparse 自动从 "GET /path HTTP/1.1" 抽取）
+//   uri         ✅ http/request 内置 → "/login.php"（wparse 自动抽取）
+//   status      ✅ http/status: 200
+//   bytes_out   ✅ digit: 368
+//   user_agent  ✅ http/agent: "Mozilla/5.0 ..."
+//   dip         ⚠️ 此样例未产出（nginx 访问日志无目标 IP 字段，需从上游补或留空）

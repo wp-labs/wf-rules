@@ -1,0 +1,6 @@
+data/
+
+# backup / debug artifacts
+*.bak
+test/DEBUG_SUMMARY.md
+stderr.log

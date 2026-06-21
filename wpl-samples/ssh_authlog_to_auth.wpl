@@ -1,0 +1,45 @@
+// SSH auth.log → auth_events
+// 原始日志（/var/log/auth.log）:
+//   Jun 20 10:15:30 host sshd[12345]: Failed password for root from 10.0.0.1 port 22 ssh2
+//   Jun 20 10:15:35 host sshd[12346]: Accepted password for admin from 10.0.0.2 port 22 ssh2
+//
+// 字段抽取目标: sip, dip, dport, service, user, result, event_time
+//
+// 治理难点:
+//   1. result 归一: "Failed"→"failed", "Accepted"→"success"
+//   2. host 是本机，dip 需从 syslog hostname 或配置注入
+//   3. 时间从 syslog 前缀解析，需补年份
+
+package /auth/ {
+    rule ssh {
+        // 匹配行: "<month> <day> <time> <host> sshd[<pid>]: <result> password for <user> from <ip> port <port> <proto>"
+        // 使用 wparse 的 syslog 格式支持或通用字段抽取
+        (_:month, _:day, time:event_time, _:host,
+         "sshd[", digit:_pid, "]: ",
+         chars:result_raw,         // "Failed" or "Accepted"
+         " password for ",
+         chars:user,
+         " from ",
+         ip:sip,
+         " port ",
+         digit:dport,
+         " ", chars:protocol)
+    }
+}
+
+// OML 后处理（在 wparse pipeline 中）:
+//   result = result_raw.lower()
+//       .replace("accepted", "success")
+//       .replace("failed", "failed")
+//   service = "ssh"
+//   dip = host_ip（从配置注入或 syslog hostname DNS 解析）
+//
+// 产出字段对照 auth_events schema：
+//   sip      ✅ ip: 10.0.0.1
+//   dip      ⚠️ 需从 syslog host 或配置注入（auth.log 本机不记录目标 IP）
+//   dport    ✅ digit: 22
+//   service  ✅ "ssh"（硬编码，数据源本身已是 SSH 日志）
+//   user     ✅ chars: "root" / "admin"
+//   result   ✅ 后处理归一: "failed" / "success"
+//   event_time ✅ syslog 时间戳（需补年份: 2025 + "Jun 20 10:15:30"）
+//   password_hash ❌ auth.log 不含密码哈希——弱口令检测需要额外的密码审计数据源
