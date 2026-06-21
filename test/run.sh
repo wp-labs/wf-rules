@@ -36,5 +36,5 @@ wfgen stream \
     --ws schemas/network.wfs --ws schemas/auth.wfs --ws schemas/http.wfs --ws schemas/dns.wfs --ws schemas/management.wfs --ws schemas/data.wfs \
     $WFL_ARGS \
     --addr 127.0.0.1:9800 \
-    --interval 60 \
+    --interval 5 \
     --rate-sleep 200
