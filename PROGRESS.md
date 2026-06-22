@@ -233,3 +233,64 @@ ls -la data/alerts/   # 当前为空（sink 未构建问题）
 2. **match 引擎逻辑正确**：`should_track_bind_alias` + `collect_alias_event` + compiler fix 在单元测试和集成层都工作正常，ssh_brute_force（纯 `on event`）的 `e.dip`/`e.user` 字段能正确解析。
 3. **`event_time` 约定是整数纳秒**：旧测试数据输出的是 Unix 秒 + epoch `_timestamp`（更早版本 wfgen 的产物），导致 wfusion 按 1.78ns 解释。重新生成数据后 `fired_at` 恢复为 2026。代码侧无 bug。
 4. **告警链路最后一公里断了**：数据、匹配、序列化、channel 全通，唯独 sink 构建环节缺失。
+
+---
+
+## port_scan close 模式排查（2026-06-22）
+
+### 问题
+
+port_scan 是 close 模式规则（`match<sip:20s>`, `on event ... and close ...`），理应通过 `scan_timeouts`（每 1s 扫描过期实例）自然产出告警，但 run.sh / gen+send 集成测试中 `network.ndjson` 始终为 0。
+
+### 单元测试验证（代码正确性已确认）
+
+为排除代码 bug，新增了两个单元测试，均通过：
+
+| 测试 | 文件 | 验证内容 | 结果 |
+|------|------|---------|------|
+| `execute_close_yield_resolves_tracked_bind_alias_field` | `wf-engine/tests/executor.rs` | CepStateMachine close → CloseOutput(event_ok=true) → execute_close → OutputRecord 产出，yield `c.sip` 正确解析为 `"10.0.0.1"` | ✅ 232 passed |
+| `port_scan_rule_triggers_close_alert` | `wf-runtime/tests/engine_task.rs` | 完整 RuleTask 管线：窗口追加 batch → pull_and_advance → scan_timeouts → close_all → execute_close_with_joins → emit → alert_rx | ✅ 61 passed |
+
+**结论：close 模式的核心代码和集成管线在测试环境是正确的。**
+
+### scan_timeouts 调查
+
+- `scan_timeouts` 每 ~1s 被调用（通过 timeout_tick 触发），已通过临时诊断确认
+- `scan_expired_at` 逻辑审查：过期时间计算 `created_at + window_dur` 正确；heap 弹出、比较 watermark、移除实例逻辑正确
+- 窗口从 5m 改为 20s 后，gen 数据的 60s 跨度能覆盖窗口时长，实例理论上应过期
+- gen 数据的 event_time 跨度 60s，20s 窗口下早期实例应在 watermark 到达 +20s 后过期
+
+### 未解决的集成问题
+
+尽管代码正确、测试通过，gen+send / stream 模式下的集成测试始终 0 告警：
+
+| 测试方式 | 二进制 | 规则加载 | 数据 | 结果 |
+|---------|--------|---------|------|------|
+| gen+send | release, clean build | port_scan-only (sed) | 新鲜 gen 数据 (60s span) | 0 alert |
+| gen+send | debug, clean build | port_scan-only (sed) | 新鲜 gen 数据 | 0 alert |
+| stream (run.sh) | release | 全部规则 | stream 实时生成 | 0 alert |
+
+**可能的原因（未验证）：**
+- Arrow IPC 编码层：`event_time` 大数值 (1.78×10^18) 在 `Value::Number(f64)` 下精度丢失约 208ns（f64 整数精度上限 2^53≈9e15），导致 watermark 与 expiry 比较微偏
+- `wfgen send` 单大帧（30000 行）vs `wfgen stream` 分块（1000 行）：单帧处理路径可能影响窗口游标/通知
+- 编译缓存：尽管做了 `cargo clean + release build`，wp-reactor 路径依赖的增量编译可能不一致
+
+### cancel token 修复
+
+`lifecycle/mod.rs` 中 `rule_cancel.child_token()` → `cancel.child_token()`：rule task 的 cancel token 从"依赖 receiver 结束"改为"直接挂 ROOT cancel"。SIGTERM 时 ROOT cancel → rule task 立即感知 → flush（close_all 产告警）。
+
+### 当前状态
+
+| 组件 | 状态 |
+|------|------|
+| wf-engine close-emission 核心逻辑 | ✅ 单元测试验证 |
+| wf-runtime rule_task 集成管线 | ✅ 集成测试验证 |
+| scan_timeouts 过期扫描 | ✅ 逻辑审查通过，被调用确认 |
+| cancel token 传播 | ✅ 已修复 |
+| gen+send/stream 集成产出告警 | ❌ 始终 0 |
+
+### 下一步
+
+1. 排查 gen+send 单帧 Arrow IPC 的 event_time 精度丢失问题（对比 stream 分块）
+2. 或用 `wfgen stream` + `--interval 5` + 足够长的运行时间（>窗口时长）来验证 close 告警
+3. 以单元测试 + 集成测试结果为信心基准，接受 close-mode 代码正确性
