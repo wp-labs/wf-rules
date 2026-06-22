@@ -5,7 +5,7 @@ use "network.wfs"
 
 rule port_scan {
     events { c : conn_events && c.action == "syn" }
-    match<sip:5m> {
+    match<sip:20s> {
         on event { c.dport | distinct | count >= 10; }
         and close { c | count >= 10; }
     } -> score(80.0)
