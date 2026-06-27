@@ -1,4 +1,4 @@
-# 任务进展 — 2026-06-26
+# 任务进展 — 2026-06-27
 
 ## 总体状态
 
@@ -9,7 +9,7 @@
 | Arrow IPC 解码 / 窗口路由 | ✅ |
 | on-event 规则告警（ssh_brute）| ✅ 3000 条/30000 事件 |
 | close 模式规则告警（port_scan）| ✅ quick/batch: 450 alerts；gen+send TCP: 450 alerts |
-| wfadm init（project 脚手架）| ✅ rules/conf/normal 三种 scope 测试通过 |
+| wfadm init/check/sink/self-update | ✅ 全部实现，init_tpl crate + connector registry 动态生成 |
 
 ---
 
@@ -17,9 +17,9 @@
 
 | 命令 | 状态 |
 |------|------|
-| `wfadm init` | ✅ 从 `docker/default_setting/` 嵌入模板，支持 `--mode rules/conf/normal`，`--repo` stub |
-| `wfadm check` | ✅ 校验 conf/、rules/、schemas/、scenarios/、connectors/、sinks/ 完整性 |
-| `wfadm sink` | ✅ 校验所有 sink TOML 配置合法性 |
+| `wfadm init` | ✅ `init_tpl` crate 提供 `include_str!()` 嵌入的 43 个模板文件；connectors 由 `wp-core-connectors` registry 动态生成（9 sink + 3 source）|
+| `wfadm check` | ✅ 校验 conf/、models/rules/、models/schemas/、models/scenarios/、topology/sinks/、topology/sources/、connectors/ 完整性 |
+| `wfadm sink` | ✅ 校验所有 sink/connector TOML；注册并报告 built-in factory 数量 |
 | `wfadm self-update` | ✅ 从 GitHub Releases 下载最新 wfusion 二进制（ureq + tar.gz）|
 
 ---
