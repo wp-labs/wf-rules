@@ -13,7 +13,7 @@ rule privileged_anomaly {
     events {
         e : auth_events
             && e.result == "success"
-            && service == "smb" || service == "rdp" || service == "winlogon"
+            && (e.service == "smb" || e.service == "rdp" || e.service == "winlogon")
     }
     on each e where
         external("unauthorized_access", fmt("{}-{}", e.user, e.dip))

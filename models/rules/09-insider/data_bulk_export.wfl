@@ -11,7 +11,7 @@ use "data.wfs"
 rule data_bulk_export {
     events {
         d : data_access_events
-            && d.action == "select" || d.action == "download"
+            && (d.action == "select" || d.action == "download")
     }
     match<user:5m> {
         on event { d.row_count | sum >= 100000; d.bytes_out | sum >= 50000000; }

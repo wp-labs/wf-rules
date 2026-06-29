@@ -7,7 +7,8 @@
 ```
 wf-rules/
 ├── wfusion.toml              ← wfusion 配置（直接运行）
-├── run.sh                    ← 一键启动：wfusion daemon + wfgen stream
+├── smoke.sh                  ← 一键可用性检查：wfgen gen + wfusion batch + alert 断言
+├── run.sh                    ← TCP daemon 联调：wfusion daemon + wfgen stream
 ├── sinks/                    ← sink 路由配置
 │   ├── connectors/           ← file_json connector
 │   ├── business.d/           ← 按告警类型路由（network/security/dns/http/management/insider）
@@ -21,31 +22,43 @@ wf-rules/
 └── TODO.md                   ← 待补规则
 ```
 
-## 快速运行
+## 可用性检查
 
 ```bash
 # 前置：wfusion 和 wfgen 在 PATH 中
-bash run.sh
+test/smoke.sh
 ```
 
 这会：
-1. 启动 wfusion daemon（加载 `schemas/*.wfs` + `rules/*/*.wfl`，监听 TCP :9800）
-2. 启动 wfgen stream（加载 `scenarios/*.wfg`，持续生成 Arrow 数据发送到 :9800）
-3. 告警输出到 `data/alerts/*.ndjson`
+1. lint `scenarios/port_scan_quick.wfg`
+2. 生成 `data/generated/port_scan_quick.jsonl`
+3. 用 `test/wfusion.batch.toml` batch 回放数据
+4. 断言 `data/alerts/network.ndjson` 非空，且告警数与 oracle 一致
 
-## 手动运行
+当前激活规则集只包含 `rules/01-recon/port_scan.wfl`，因此 smoke test 的期望输出是 `network.ndjson`。
+
+## TCP daemon 联调
+
+该路径需要在普通终端或非沙箱权限下运行。受限命令沙箱可能无法保持本地 TCP listener，表现为 `wfgen send` 连接 `127.0.0.1:9800` 失败。
 
 ```bash
-# 终端 1：wfusion
-wfusion run --config wfusion.toml --work-dir .
+# 默认运行 5 分钟，到时自动停止并输出 alert 统计
+test/run.sh
 
-# 终端 2：wfgen
-wfgen stream \
-  --scenario-dir scenarios/ \
-  --ws schemas/network.wfs schemas/auth.wfs schemas/http.wfs schemas/dns.wfs \
-  --wfl rules/*/*.wfl \
-  --addr 127.0.0.1:9800
+# 指定运行时间
+test/run.sh 60s
+test/run.sh 10m
+
+# 或用环境变量
+DURATION=30s INTERVAL=5 RATE_SLEEP=200 test/run.sh
 ```
+
+运行日志写入：
+
+- `data/logs/wfusion.log`
+- `data/logs/wfgen.log`
+
+如果 `wfusion` 或 `wfgen stream` 提前退出，脚本会停止另一侧进程并打印对应日志尾部，避免长时间挂住。
 
 ## 数据流
 

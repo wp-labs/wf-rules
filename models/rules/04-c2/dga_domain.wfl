@@ -5,7 +5,7 @@ use "dns.wfs"
 // 逐条 DNS 查询 via external("domain_reputation", d.query) 查
 // Redis HASH threat_domains（字段：risk_level, category, first_seen）。
 //
-// 只对非 A 记录且非顶级域名的查询做检查（减少 Redis 压力）。
+// 只对 A/AAAA 解析查询做检查，减少 Redis 压力。
 //
 // 配置: knowdb.toml
 //   [fun.domain_reputation] call=hget key=threat_domains
@@ -16,7 +16,7 @@ use "dns.wfs"
 rule dga_domain {
     events {
         d : dns_events
-            && d.qtype == "A" || d.qtype == "AAAA"
+            && (d.qtype == "A" || d.qtype == "AAAA")
     }
     on each d where
         external("domain_reputation", d.query) -> score(75.0)

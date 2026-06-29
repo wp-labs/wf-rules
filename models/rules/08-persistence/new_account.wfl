@@ -13,7 +13,7 @@ use "management.wfs"
 rule new_account {
     events {
         e : ad_change_events
-            && e.action == "user_created" || e.action == "added_to_priv_group"
+            && (e.action == "user_created" || e.action == "added_to_priv_group")
     }
     match<sip:5m> {
         on event { e | count >= 1; }

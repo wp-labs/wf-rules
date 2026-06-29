@@ -11,9 +11,9 @@ use "auth.wfs"
 
 rule scan_login_xfer {
     events {
-        scan  : conn_events && (dport == 22 || dport == 445 || dport == 3389) && bytes_out < 1000
-        login : auth_events && result == "success"
-        xfer  : conn_events && bytes_out >= 10000
+        scan  : conn_events && (scan.dport == 22 || scan.dport == 445 || scan.dport == 3389) && scan.bytes_out < 1000
+        login : auth_events && login.result == "success"
+        xfer  : conn_events && xfer.bytes_out >= 10000
     }
     match<sip,dip:30m> {
         on event {

@@ -1,14 +1,13 @@
 use "../schemas/auth.wfs"
+use "../rules/02-initial_access/ssh_brute_force.wfl"
 
 #[duration=1m]
-scenario ssh_brute_quick {
+scenario ssh_brute_quick<seed=42> {
   traffic { stream auth_events gen 500/s }
   injection {
     hit<100%> auth_events {
       sip seq {
-        use(result="failed") with(20,5s)
-        use(service="ssh") with(20,0s)
-        use(user="root") with(20,0s)
+        use(result="failed", service="ssh", user="root") with(12)
       }
     }
   }
