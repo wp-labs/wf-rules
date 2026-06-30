@@ -1,0 +1,16 @@
+extern mod rust,ver { path = "@{PATH}"; }
+
+mod envs  {
+   env _common  : rust_env.init   {
+    root      = ".";
+    prj_key   = "you-proj" ;
+    target_name = "bin-name";
+
+  }
+
+  #[usage(desp="default mamcos", color="green")]
+  env default    : envs._common,debug;
+}
+
+mod main  {
+}
