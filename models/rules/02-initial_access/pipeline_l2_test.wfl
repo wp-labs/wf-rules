@@ -1,0 +1,19 @@
+rule pipeline_l2_test {
+    events {
+        e : auth_events
+            && e.result == "failed"
+    }
+    match<sip:5m> {
+        on event { e | count >= 5; }
+    }
+    |> match<sip:15m> {
+        on event { _in | count >= 1; }
+        and close { _in | count >= 3; }
+    } -> score(60.0)
+    entity(ip, _in.sip)
+    yield security_alerts (
+        sip = _in.sip,
+        alert_type = "pipeline_l2_test",
+        detail = "L2 incremental reload validation"
+    )
+}
